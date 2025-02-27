@@ -15,16 +15,20 @@ torrent_manager = TorrentManager()
 torrent_messages = {}
 torrent_last_progress = {}
 
+
 # Authentication decorator
 def authorized_only(func):
     """Decorator to check if user is authorized."""
+
     async def wrapper(update: Update, context: CallbackContext):
         user_id = update.effective_user.id
         if not AUTHORIZED_USERS or user_id in AUTHORIZED_USERS:
             return await func(update, context)
         else:
             await update.message.reply_text("You are not authorized to use this bot.")
+
     return wrapper
+
 
 # Torrent progress tracking
 async def update_torrent_progress(chat_id, torrent_id, context: CallbackContext):
@@ -34,16 +38,25 @@ async def update_torrent_progress(chat_id, torrent_id, context: CallbackContext)
         progress = torrent.percent_done * 100
 
         # Check if progress has changed since last update
-        if torrent_id in torrent_last_progress and torrent_last_progress[torrent_id] == progress:
+        if (
+            torrent_id in torrent_last_progress
+            and torrent_last_progress[torrent_id] == progress
+        ):
             return  # Skip updating if progress hasn't changed
 
-        message_text = format_torrent_message(torrent, torrent_manager.get_free_space(DATA_DIR))
-        
+        message_text = format_torrent_message(
+            torrent, torrent_manager.get_free_space(DATA_DIR)
+        )
+
         if torrent_id in torrent_messages and chat_id in torrent_messages[torrent_id]:
             message_id = torrent_messages[torrent_id][chat_id]
-            await context.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=message_text)
+            await context.bot.edit_message_text(
+                chat_id=chat_id, message_id=message_id, text=message_text
+            )
         else:
-            sent_message = await context.bot.send_message(chat_id=chat_id, text=message_text)
+            sent_message = await context.bot.send_message(
+                chat_id=chat_id, text=message_text
+            )
             if torrent_id not in torrent_messages:
                 torrent_messages[torrent_id] = {}
             torrent_messages[torrent_id][chat_id] = sent_message.message_id
@@ -54,7 +67,10 @@ async def update_torrent_progress(chat_id, torrent_id, context: CallbackContext)
         # Check if the torrent is complete
         if progress >= 100:
             # Remove the torrent from tracking
-            if torrent_id in torrent_messages and chat_id in torrent_messages[torrent_id]:
+            if (
+                torrent_id in torrent_messages
+                and chat_id in torrent_messages[torrent_id]
+            ):
                 del torrent_messages[torrent_id][chat_id]
             if torrent_id in torrent_last_progress:
                 del torrent_last_progress[torrent_id]
@@ -86,6 +102,7 @@ async def update_torrent_progress(chat_id, torrent_id, context: CallbackContext)
         except:
             pass
 
+
 # Command handlers
 @authorized_only
 async def search(update: Update, context: CallbackContext):
@@ -95,11 +112,9 @@ async def search(update: Update, context: CallbackContext):
             query = " ".join(context.args)
             # Send the "Searching for torrents..." message
             search_message = await update.message.reply_text(
-                f"Searching for torrents... {query}", 
-                parse_mode="HTML", 
-                quote=False
+                f"Searching for torrents... {query}", parse_mode="HTML", quote=False
             )
-            
+
             formatted_results, results = request_jackett(query)
             if not formatted_results:
                 response_message = "`No results found.`"
@@ -115,30 +130,34 @@ async def search(update: Update, context: CallbackContext):
                 print(f"Error editing message: {e}")
                 await update.message.reply_text(
                     "An error occurred while formatting the message. Please try again later.",
-                    quote=False
+                    quote=False,
                 )
 
-            context.chat_data['results'] = results  # Store results in chat data
+            context.chat_data["results"] = results  # Store results in chat data
         else:
             await update.message.reply_text("Usage: /search <query>")
     except Exception as e:
         print(f"An error occurred in search command: {e}")
         await update.message.reply_text("Something went wrong. Please try again later.")
 
+
 @authorized_only
 async def handle_reply(update: Update, context: CallbackContext):
     """Handle replies to search results."""
     user_reply = update.message.reply_to_message.text
-    if not user_reply or 'results' not in context.chat_data:
-        await update.message.reply_text("No search results found in context. Please start a new search.", quote=False)
+    if not user_reply or "results" not in context.chat_data:
+        await update.message.reply_text(
+            "No search results found in context. Please start a new search.",
+            quote=False,
+        )
         return
 
     # Extracting the selected index from the reply
     try:
-        index = int(update.message.text.split('.')[0]) - 1
-        results = context.chat_data['results']
+        index = int(update.message.text.split(".")[0]) - 1
+        results = context.chat_data["results"]
         torrent_link = get_torrent_link(index, results)
-        
+
         # Adding the torrent to Transmission
         try:
             if torrent_link.startswith("magnet:"):
@@ -153,33 +172,40 @@ async def handle_reply(update: Update, context: CallbackContext):
                     # Try to extract magnet link from error
                     error_str = str(e)
                     if "magnet:?" in error_str:
-                        magnet_link = "magnet:?" + error_str.split("magnet:?")[1].split(" ")[0]
+                        magnet_link = (
+                            "magnet:?" + error_str.split("magnet:?")[1].split(" ")[0]
+                        )
                         added_torrent = torrent_manager.add_torrent(magnet_link)
                     else:
                         raise
-            
+
             torrent_id = added_torrent.id
             chat_id = update.effective_chat.id
-            sent_message = await update.message.reply_text("Torrent added successfully to Transmission.")
+            sent_message = await update.message.reply_text(
+                "Torrent added successfully to Transmission."
+            )
             time.sleep(5)
-            
+
             # Store the initial message ID
             if torrent_id not in torrent_messages:
                 torrent_messages[torrent_id] = {}
             torrent_messages[torrent_id][chat_id] = sent_message.message_id
-            
+
             # Start the repeating job
             context.job_queue.run_repeating(
                 lambda c: update_torrent_progress(chat_id, torrent_id, c),
-                interval=5, 
-                first=0, 
-                name=str(torrent_id)
+                interval=5,
+                first=0,
+                name=str(torrent_id),
             )
         except Exception as e:
             print(traceback.format_exc())
             await update.message.reply_text(f"Failed to add torrent: {str(e)}")
     except (IndexError, ValueError):
-        await update.message.reply_text("Invalid selection. Please reply with a valid index number.", quote=False)
+        await update.message.reply_text(
+            "Invalid selection. Please reply with a valid index number.", quote=False
+        )
+
 
 @authorized_only
 async def imdb(update: Update, context: CallbackContext):
@@ -188,19 +214,24 @@ async def imdb(update: Update, context: CallbackContext):
         link = context.args[0]
         search_query = get_imdb_info(link)
         await update.message.reply_text(f"Searching for: {search_query}")
-        
+
         formatted_results, results = request_jackett(search_query)
         if not formatted_results:
             response_message = "`No results found.`"
-            await update.message.reply_text(response_message, parse_mode='MarkdownV2', quote=False)
+            await update.message.reply_text(
+                response_message, parse_mode="MarkdownV2", quote=False
+            )
         else:
             response_message = formatted_results
             response_message += "\n\nReply to this message with the index of the torrent you want to download."
             response_message = f"```\n{response_message}```"
-            await update.message.reply_text(response_message, parse_mode='MarkdownV2', quote=False)
-            context.chat_data['results'] = results  # Store results in chat data
+            await update.message.reply_text(
+                response_message, parse_mode="MarkdownV2", quote=False
+            )
+            context.chat_data["results"] = results  # Store results in chat data
     else:
         await update.message.reply_text("Usage: /imdb <movie url>")
+
 
 @authorized_only
 async def add_torrent(update: Update, context: CallbackContext):
@@ -212,26 +243,31 @@ async def add_torrent(update: Update, context: CallbackContext):
                 added_torrent = torrent_manager.add_torrent(link)
                 torrent_id = added_torrent.id
                 chat_id = update.effective_chat.id
-                sent_message = await update.message.reply_text("Torrent added successfully to Transmission.")
-                
+                sent_message = await update.message.reply_text(
+                    "Torrent added successfully to Transmission."
+                )
+
                 # Store the initial message ID
                 if torrent_id not in torrent_messages:
                     torrent_messages[torrent_id] = {}
                 torrent_messages[torrent_id][chat_id] = sent_message.message_id
-                
+
                 # Start the repeating job
                 context.job_queue.run_repeating(
                     lambda c: update_torrent_progress(chat_id, torrent_id, c),
-                    interval=5, 
-                    first=0, 
-                    name=str(torrent_id)
+                    interval=5,
+                    first=0,
+                    name=str(torrent_id),
                 )
             except Exception as e:
                 await update.message.reply_text(f"Failed to add torrent: {e}")
         else:
-            await update.message.reply_text("Please provide a valid magnet link or torrent file URL.")
+            await update.message.reply_text(
+                "Please provide a valid magnet link or torrent file URL."
+            )
     else:
         await update.message.reply_text("Usage: /torrent <magnet_link_or_torrent_url>")
+
 
 @authorized_only
 async def list_torrents(update: Update, context: CallbackContext):
@@ -239,16 +275,17 @@ async def list_torrents(update: Update, context: CallbackContext):
     torrents = torrent_manager.get_all_torrents()
     response_message = "Torrents:\n"
     response_message += "ID: Name - Progress\n"
-    
+
     for torrent in torrents:
         progress_percent = torrent.percent_done * 100
         torrent_size = human_readable_size(torrent.total_size)
         response_message += f"<code>{torrent.id}</code>: <b>{torrent.name}</b> - {progress_percent:.2f}% - {torrent_size}\n"
-    
+
     free = torrent_manager.get_free_space(DATA_DIR)
     response_message += f"<b>Free Space: {human_readable_size(free)}</b>"
-    
-    await update.message.reply_text(response_message, parse_mode='HTML', quote=False)
+
+    await update.message.reply_text(response_message, parse_mode="HTML", quote=False)
+
 
 @authorized_only
 async def delete_torrent(update: Update, context: CallbackContext):
@@ -258,11 +295,14 @@ async def delete_torrent(update: Update, context: CallbackContext):
             torrent_id = int(context.args[0])
             torrent = torrent_manager.get_torrent(torrent_id)
             torrent_manager.remove_torrent(torrent_id, delete_data=True)
-            await update.message.reply_text(f"Torrent {torrent.name} deleted successfully.")
+            await update.message.reply_text(
+                f"Torrent {torrent.name} deleted successfully."
+            )
         except Exception as e:
             await update.message.reply_text(f"Failed to delete torrent: {e}")
     else:
         await update.message.reply_text("Usage: /delete <torrent_id>")
+
 
 @authorized_only
 async def start_torrent(update: Update, context: CallbackContext):
@@ -272,11 +312,14 @@ async def start_torrent(update: Update, context: CallbackContext):
             torrent_id = int(context.args[0])
             torrent = torrent_manager.get_torrent(torrent_id)
             torrent_manager.start_torrent(torrent_id)
-            await update.message.reply_text(f"Torrent {torrent.name} started successfully.")
+            await update.message.reply_text(
+                f"Torrent {torrent.name} started successfully."
+            )
         except Exception as e:
             await update.message.reply_text(f"Failed to start torrent: {e}")
     else:
         await update.message.reply_text("Usage: /start <torrent_id>")
+
 
 @authorized_only
 async def stop_torrent(update: Update, context: CallbackContext):
@@ -286,11 +329,14 @@ async def stop_torrent(update: Update, context: CallbackContext):
             torrent_id = int(context.args[0])
             torrent = torrent_manager.get_torrent(torrent_id)
             torrent_manager.stop_torrent(torrent_id)
-            await update.message.reply_text(f"Torrent {torrent.name} stopped successfully.")
+            await update.message.reply_text(
+                f"Torrent {torrent.name} stopped successfully."
+            )
         except Exception as e:
             await update.message.reply_text(f"Failed to stop torrent: {e}")
     else:
         await update.message.reply_text("Usage: /stop <torrent_id>")
+
 
 @authorized_only
 async def move_to_movie(update: Update, context: CallbackContext):
@@ -300,11 +346,14 @@ async def move_to_movie(update: Update, context: CallbackContext):
             torrent_id = int(context.args[0])
             torrent = torrent_manager.get_torrent(torrent_id)
             torrent_manager.move_torrent_data(torrent_id, MOVIES_DIR)
-            await update.message.reply_text(f"Torrent {torrent.name} moved to Movies directory.")
+            await update.message.reply_text(
+                f"Torrent {torrent.name} moved to Movies directory."
+            )
         except Exception as e:
             await update.message.reply_text(f"Failed to move torrent {torrent_id}: {e}")
     else:
         await update.message.reply_text("Usage: /movie <torrent_id> or /m <torrent_id>")
+
 
 @authorized_only
 async def move_to_tv(update: Update, context: CallbackContext):
@@ -314,11 +363,14 @@ async def move_to_tv(update: Update, context: CallbackContext):
             torrent_id = int(context.args[0])
             torrent = torrent_manager.get_torrent(torrent_id)
             torrent_manager.move_torrent_data(torrent_id, TV_DIR)
-            await update.message.reply_text(f"Torrent {torrent.name} moved to TV directory.")
+            await update.message.reply_text(
+                f"Torrent {torrent.name} moved to TV directory."
+            )
         except Exception as e:
             await update.message.reply_text(f"Failed to move torrent {torrent_id}: {e}")
     else:
         await update.message.reply_text("Usage: /tv <torrent_id> or /t <torrent_id>")
+
 
 @authorized_only
 async def help_command(update: Update, context: CallbackContext):
@@ -339,4 +391,4 @@ async def help_command(update: Update, context: CallbackContext):
 
 💬 */help* - *Shows this help message*.
 """
-    await update.message.reply_text(help_message, parse_mode='Markdown', quote=False)
+    await update.message.reply_text(help_message, parse_mode="Markdown", quote=False)

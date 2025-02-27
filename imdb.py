@@ -2,6 +2,7 @@ import requests
 from urllib.parse import urlparse, unquote
 from config import OMDB_TOKEN
 
+
 def get_omdb_token():
     """Get OMDB API token from config."""
     token = OMDB_TOKEN
@@ -9,14 +10,16 @@ def get_omdb_token():
         raise ValueError("OMDB_TOKEN is not configured")
     return token
 
+
 def extract_imdb_id(imdb_url):
     """Extract IMDb ID from URL."""
     parsed_url = urlparse(imdb_url)
-    path_parts = [part for part in parsed_url.path.split('/') if part]
+    path_parts = [part for part in parsed_url.path.split("/") if part]
     if path_parts:
         return unquote(path_parts[-1])
     else:
         raise ValueError("Couldn't find the IMDb ID from the URL")
+
 
 def get_imdb_info(imdb_url):
     """Get movie/show information from IMDb URL using OMDB API."""

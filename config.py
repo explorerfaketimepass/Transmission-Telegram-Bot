@@ -12,6 +12,10 @@ if not TELEGRAM_TOKEN:
 # Transmission configuration
 TRANSMISSION_HOST = os.getenv("TRANSMISSION_HOST", "localhost")
 TRANSMISSION_PORT = int(os.getenv("TRANSMISSION_PORT", 9091))
+TRANSMISSION_PROTOCOL = os.getenv("TRANSMISSION_PROTOCOL", "http")
+TRANSMISSION_USERNAME = os.getenv("TRANSMISSION_USERNAME")
+TRANSMISSION_PASSWORD = os.getenv("TRANSMISSION_PASSWORD")
+
 
 # Jackett configuration
 JACKETT_URL = os.getenv("JACKETT_URL")
@@ -33,8 +37,8 @@ MOVIES_DIR = os.getenv("MOVIES_DIR", f"{DATA_DIR}/completed/Movies")
 TV_DIR = os.getenv("TV_DIR", f"{DATA_DIR}/completed/TV")
 
 # Data storage files
-TORRENTS_FILE = os.getenv("TORRENTS_FILE", 'torrents_data.json')
-USERS_FILE = os.getenv("USERS_FILE", 'users_data.json')
+TORRENTS_FILE = os.getenv("TORRENTS_FILE", "torrents_data.json")
+USERS_FILE = os.getenv("USERS_FILE", "users_data.json")
 
 # Retry settings for Transmission connection
 MAX_RETRIES = int(os.getenv("MAX_RETRIES", 30))
@@ -43,6 +47,7 @@ RETRY_DELAY = int(os.getenv("RETRY_DELAY", 60))
 # Authorized users (Telegram user IDs)
 # None means all users are authorized
 AUTHORIZED_USERS = [
-    int(user_id) for user_id in os.getenv("AUTHORIZED_USERS", "").split(",")
+    int(user_id)
+    for user_id in os.getenv("AUTHORIZED_USERS", "").split(",")
     if user_id.strip()
 ] or None
