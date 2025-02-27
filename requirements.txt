@@ -1,0 +1,7 @@
+python-telegram-bot>=20.0
+transmission-rpc>=3.2.2
+requests>=2.28.0
+prettytable>=2.5.0
+pytz>=2023.3
+python-dotenv>=1.0.0
+torf>=4.1.3
