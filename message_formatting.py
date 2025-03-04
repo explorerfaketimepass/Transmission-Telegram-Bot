@@ -1,6 +1,7 @@
 from datetime import datetime
 import pytz
 import urllib.parse
+from config import DOWNLOAD_LINK_PREFIX
 
 
 def human_readable_size(size, decimal_places=2):
@@ -34,11 +35,12 @@ def format_torrent_message(torrent, free_space):
     readable_size = human_readable_size(torrent.total_size)
     readable_date = format_date(torrent.added_date)
     readable_free_space = human_readable_size(free_space)
+    download_speed = human_readable_size(torrent.rate_download)
 
     # URL encode the torrent name
     encoded_name = urllib.parse.quote(torrent.name)
 
-    torrent_index_url = "http://index.harshalp.tech"
+    torrent_index_url = DOWNLOAD_LINK_PREFIX or None
 
     # Format message based on download progress
     if torrent.percent_done < 1:
@@ -46,15 +48,22 @@ def format_torrent_message(torrent, free_space):
             f"ID: {torrent.id}, Name: {name}\n"
             f"Progress: [{bar}] {progress_percent:.2f}%\n"
             f"ETA: {torrent.eta}\nSize: {readable_size}"
+            f"\nDownload Speed: {download_speed}/s"
             f"\nAdded: {readable_date}"
             f"\nFree Disk Space = {readable_free_space}"
         )
     else:
+        download_link = (
+            f"Download link: {torrent_index_url}/{encoded_name}\n"
+            if torrent_index_url
+            else ""
+        )
         return (
             f"ID: {torrent.id}, Name: {name}\n"
             f"Progress: [{bar}] {progress_percent:.2f}%\n"
-            f"\nDownload link: {torrent_index_url}/{encoded_name}"
-            f"\nFree Disk Space = {readable_free_space}"
+            f"{download_link}"
+            f"Size: {readable_size}\n"
+            f"Free Disk Space = {readable_free_space}"
         )
 
 
@@ -62,28 +71,30 @@ def format_torrent_list(torrents, free_space, chunk_size=10):
     """Format a list of torrents into message chunks for display."""
     if not torrents:
         return ["No torrents found."]
-    
+
     # Group torrents into chunks
-    torrent_chunks = [torrents[i:i+chunk_size] for i in range(0, len(torrents), chunk_size)]
+    torrent_chunks = [
+        torrents[i : i + chunk_size] for i in range(0, len(torrents), chunk_size)
+    ]
     messages = []
-    
+
     # Format each chunk as a separate message
     for i, chunk in enumerate(torrent_chunks):
         response_message = f"<b>Torrents ({i*chunk_size + 1}-{i*chunk_size + len(chunk)} of {len(torrents)}):</b>\n\n"
-        
+
         # Add torrents to the message with nice formatting
         for torrent in chunk:
             progress_percent = torrent.percent_done * 100
             torrent_size = human_readable_size(torrent.total_size)
-            
+
             response_message += f"<code>ID: {torrent.id}</code>\n"
             response_message += f"<b>{torrent.name}</b>\n"
             response_message += f"<code>Progress: {progress_percent:.2f}% | Size: {torrent_size}</code>\n\n"
-        
+
         # Add free space information to the last message
         if i == len(torrent_chunks) - 1:
             response_message += f"<b>Free Space: {human_readable_size(free_space)}</b>"
-        
+
         messages.append(response_message)
-    
+
     return messages

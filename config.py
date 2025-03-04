@@ -36,6 +36,9 @@ DATA_DIR = os.getenv("DATA_DIR", "/data")
 MOVIES_DIR = os.getenv("MOVIES_DIR", f"{DATA_DIR}/completed/Movies")
 TV_DIR = os.getenv("TV_DIR", f"{DATA_DIR}/completed/TV")
 
+# Download Link Prefix
+DOWNLOAD_LINK_PREFIX = os.getenv("DOWNLOAD_LINK_PREFIX")
+
 
 # Retry settings for Transmission connection
 MAX_RETRIES = int(os.getenv("MAX_RETRIES", 30))

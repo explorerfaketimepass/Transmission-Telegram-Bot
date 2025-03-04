@@ -93,6 +93,12 @@ TV_DIR=/data/completed/TV
 MAX_RETRIES=30
 RETRY_DELAY=60
 
+# Download Link Prefix
+# This is the prefix that will be added to the download link
+# This is useful if you are using a file indexer server like apache or nginx to serve the files
+# If you are not using a file indexer server, leave this empty
+DOWNLOAD_LINK_PREFIX=
+
 # Security - comma separated list of Telegram user IDs who can use the bot
 # Leave empty to allow all users
 AUTHORIZED_USERS=123456789,987654321
