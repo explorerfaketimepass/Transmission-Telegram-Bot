@@ -185,7 +185,8 @@ async def handle_reply(update: Update, context: CallbackContext):
             sent_message = await update.message.reply_text(
                 f"Torrent added successfully to Transmission. - {torrent_name} (ID: {torrent_id})"
             )
-            time.sleep(5)
+
+            start_monitoring(context)
 
             # Store the initial message ID
             if torrent_id not in torrent_messages:
@@ -208,12 +209,40 @@ async def handle_reply(update: Update, context: CallbackContext):
         )
 
 
+torrent_messages = {}  # Maps torrent_id -> {chat_id -> message_id}
+torrent_last_progress = {}  # Maps torrent_id -> progress_percentage
+monitoring_active = False  # Flag to track if monitoring is currently running
+
+
 async def check_torrents(context: CallbackContext):
     """
     Periodically check and update the progress of all active torrents.
     This function runs in the background and updates messages for ongoing downloads.
     """
+    global monitoring_active
+
     try:
+        # If no torrents are being tracked, stop the job
+        if not torrent_messages:
+            print("No torrents being tracked. Stopping monitoring job.")
+            monitoring_active = False
+
+            # remove the message tracking
+            for torrent_id, chat_dict in list(torrent_messages.items()):
+                for chat_id, message_id in chat_dict.items():
+                    try:
+                        await context.bot.delete_message(
+                            chat_id=chat_id, message_id=message_id
+                        )
+                    except Exception:
+                        pass
+
+            # Find and remove the check_torrents job
+            jobs = context.job_queue.get_jobs_by_name("check_torrents")
+            for job in jobs:
+                job.schedule_removal()
+            return
+
         # Iterate through existing tracker messages
         for torrent_id, chat_dict in list(torrent_messages.items()):
             try:
@@ -254,37 +283,25 @@ async def check_torrents(context: CallbackContext):
 
                         # Remove tracking if download is complete
                         if progress >= 100:
-                            if (
-                                torrent_id in torrent_messages
-                                and chat_id in torrent_messages[torrent_id]
-                            ):
-                                del torrent_messages[torrent_id][chat_id]
+                            print(
+                                f"Torrent {torrent_id} complete. Removing from tracking."
+                            )
+                            if chat_id in chat_dict:
+                                del chat_dict[chat_id]
+
+                            # If this chat_dict is now empty, remove the torrent entirely
+                            if not chat_dict and torrent_id in torrent_messages:
+                                del torrent_messages[torrent_id]
+
                             if torrent_id in torrent_last_progress:
                                 del torrent_last_progress[torrent_id]
-
-                            # If no more chats are tracking this torrent, clean up
-                            if not torrent_messages.get(torrent_id):
-                                # Try to remove any per-torrent jobs
-                                try:
-                                    jobs = context.job_queue.get_jobs_by_name(
-                                        str(torrent_id)
-                                    )
-                                    for job in jobs:
-                                        job.schedule_removal()
-                                except Exception as job_error:
-                                    print(
-                                        f"Error removing job for torrent {torrent_id}: {job_error}"
-                                    )
 
                     except Exception as edit_error:
                         print(
                             f"Error updating message for torrent {torrent_id} in chat {chat_id}: {edit_error}"
                         )
                         # Clean up tracking if message update fails
-                        if (
-                            torrent_id in torrent_messages
-                            and chat_id in torrent_messages[torrent_id]
-                        ):
+                        if chat_id in chat_dict:
                             try:
                                 # Try to delete the message if we can't update it
                                 await context.bot.delete_message(
@@ -292,7 +309,11 @@ async def check_torrents(context: CallbackContext):
                                 )
                             except Exception:
                                 pass  # Ignore errors when deleting
-                            del torrent_messages[torrent_id][chat_id]
+                            del chat_dict[chat_id]
+
+                        # If this chat_dict is now empty, remove the torrent entirely
+                        if not chat_dict and torrent_id in torrent_messages:
+                            del torrent_messages[torrent_id]
 
             except Exception as torrent_error:
                 print(f"Error getting torrent {torrent_id}: {torrent_error}")
@@ -301,9 +322,29 @@ async def check_torrents(context: CallbackContext):
                     del torrent_messages[torrent_id]
                 if torrent_id in torrent_last_progress:
                     del torrent_last_progress[torrent_id]
+                # Delete the message if it exists
+                for chat_id, message_id in list(chat_dict.items()):
+                    try:
+                        await context.bot.delete_message(
+                            chat_id=chat_id, message_id=message_id
+                        )
+                    except Exception:
+                        pass
 
     except Exception as global_error:
         print(f"Error in check_torrents: {global_error}")
+
+
+def start_monitoring(context: CallbackContext):
+    """Start the torrent monitoring if it's not already running."""
+    global monitoring_active
+
+    if not monitoring_active and torrent_messages:
+        print("Starting torrent monitoring.")
+        monitoring_active = True
+        context.job_queue.run_repeating(
+            check_torrents, interval=5, first=0, name="check_torrents"
+        )
 
 
 @authorized_only
@@ -342,22 +383,42 @@ async def add_torrent(update: Update, context: CallbackContext):
                 added_torrent = torrent_manager.add_torrent(link)
                 torrent_id = added_torrent.id
                 chat_id = update.effective_chat.id
+
+                # Send initial message
                 sent_message = await update.message.reply_text(
                     "Torrent added successfully to Transmission."
                 )
 
-                # Store the initial message ID
+                # Wait briefly to let Transmission start processing
+                time.sleep(1)
+
+                # Get the torrent details and update the message
+                torrent = torrent_manager.get_torrent(torrent_id)
+                message_text = format_torrent_message(
+                    torrent, torrent_manager.get_free_space(DATA_DIR)
+                )
+
+                try:
+                    await context.bot.edit_message_text(
+                        chat_id=chat_id,
+                        message_id=sent_message.message_id,
+                        text=message_text,
+                    )
+                except Exception:
+                    # If can't edit, send a new message
+                    sent_message = await update.message.reply_text(message_text)
+
+                # Store the message ID for tracking
                 if torrent_id not in torrent_messages:
                     torrent_messages[torrent_id] = {}
                 torrent_messages[torrent_id][chat_id] = sent_message.message_id
 
-                # Start the repeating job
-                context.job_queue.run_repeating(
-                    lambda c: update_torrent_progress(chat_id, torrent_id, c),
-                    interval=5,
-                    first=0,
-                    name=str(torrent_id),
-                )
+                # Set initial progress tracking
+                torrent_last_progress[torrent_id] = torrent.percent_done * 100
+
+                # Start monitoring if not already running
+                start_monitoring(context)
+
             except Exception as e:
                 await update.message.reply_text(f"Failed to add torrent: {e}")
         else:

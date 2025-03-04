@@ -80,10 +80,6 @@ def main():
 
     # Update torrents
 
-    application.job_queue.run_repeating(
-        check_torrents, interval=5, name="check_torrents"
-    )
-    application.job_queue.scheduler.max_instances = 1
     # Run the bot
     application.run_polling()
 
