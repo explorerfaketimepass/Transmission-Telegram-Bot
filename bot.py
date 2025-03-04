@@ -1,5 +1,6 @@
 from telegram.ext import Application, CommandHandler, MessageHandler
 from telegram.ext.filters import REPLY
+from telegram import BotCommand
 from commands import (
     search,
     handle_reply,
@@ -16,10 +17,39 @@ from commands import (
 from config import TELEGRAM_TOKEN
 
 
+async def set_commands(app: Application):
+    """Set the bot commands."""
+    commands = [
+        BotCommand(
+            command="list",
+            description="Lists all the torrents with their ids and percent done status. It also shows the free space.",
+        ),
+        BotCommand(command="delete", description="Deletes a torrent using its id."),
+        BotCommand(command="start", description="Starts a torrent using its id."),
+        BotCommand(command="stop", description="Stops a torrent using its id."),
+        BotCommand(command="movie", description="Move Movie to Movies folder"),
+        BotCommand(command="tv", description="Move TV Series to TV folder"),
+        BotCommand(
+            command="search",
+            description="Search for a movie or TV show (e.g., 'The Matrix' or 'Simpsons s01e01')",
+        ),
+        BotCommand(
+            command="imdb",
+            description="Get information from an IMDb link and search it",
+        ),
+        BotCommand(command="torrent", description="Add a torrent using a magnet link."),
+        BotCommand(command="ls", description="Same as /list"),
+        BotCommand(command="h", description="To see all commands"),
+    ]
+    await app.bot.set_my_commands(commands)
+
+
 def main():
     """Start the bot."""
     # Set up the Application
-    application = Application.builder().token(TELEGRAM_TOKEN).build()
+    application = (
+        Application.builder().token(TELEGRAM_TOKEN).post_init(set_commands).build()
+    )
 
     # Add handlers
     # Search for torrents

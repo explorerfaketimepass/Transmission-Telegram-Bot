@@ -273,18 +273,41 @@ async def add_torrent(update: Update, context: CallbackContext):
 async def list_torrents(update: Update, context: CallbackContext):
     """List all torrents in the client."""
     torrents = torrent_manager.get_all_torrents()
-    response_message = "Torrents:\n"
-    response_message += "ID: Name - Progress\n"
 
-    for torrent in torrents:
-        progress_percent = torrent.percent_done * 100
-        torrent_size = human_readable_size(torrent.total_size)
-        response_message += f"<code>{torrent.id}</code>: <b>{torrent.name}</b> - {progress_percent:.2f}% - {torrent_size}\n"
+    if not torrents:
+        await update.message.reply_text(
+            "No torrents found.", parse_mode="HTML", quote=False
+        )
+        return
 
-    free = torrent_manager.get_free_space(DATA_DIR)
-    response_message += f"<b>Free Space: {human_readable_size(free)}</b>"
+    # Group torrents into chunks of 10
+    chunk_size = 10
+    torrent_chunks = [
+        torrents[i : i + chunk_size] for i in range(0, len(torrents), chunk_size)
+    ]
 
-    await update.message.reply_text(response_message, parse_mode="HTML", quote=False)
+    # Send each chunk as a separate message
+    for i, chunk in enumerate(torrent_chunks):
+        response_message = f"<b>Torrents ({i*chunk_size + 1}-{i*chunk_size + len(chunk)} of {len(torrents)}):</b>\n\n"
+
+        # Add torrents to the message with nice formatting and line breaks
+        for torrent in chunk:
+            progress_percent = torrent.percent_done * 100
+            torrent_size = human_readable_size(torrent.total_size)
+
+            # Format each torrent with clear separation
+            response_message += f"<code>ID: {torrent.id}</code>\n"
+            response_message += f"<b>{torrent.name}</b>\n"
+            response_message += f"<code>Progress: {progress_percent:.2f}% | Size: {torrent_size}</code>\n\n"
+
+        # Add free space information to the last message
+        if i == len(torrent_chunks) - 1:
+            free = torrent_manager.get_free_space(DATA_DIR)
+            response_message += f"<b>Free Space: {human_readable_size(free)}</b>"
+
+        await update.message.reply_text(
+            response_message, parse_mode="HTML", quote=False
+        )
 
 
 @authorized_only
