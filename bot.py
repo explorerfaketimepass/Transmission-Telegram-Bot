@@ -13,6 +13,7 @@ from commands import (
     move_to_movie,
     move_to_tv,
     help_command,
+    check_torrents,
 )
 from config import TELEGRAM_TOKEN
 
@@ -77,6 +78,12 @@ def main():
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("h", help_command))
 
+    # Update torrents
+
+    application.job_queue.run_repeating(
+        check_torrents, interval=5, name="check_torrents"
+    )
+    application.job_queue.scheduler.max_instances = 1
     # Run the bot
     application.run_polling()
 

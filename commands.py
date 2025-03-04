@@ -8,7 +8,7 @@ from config import DATA_DIR, MOVIES_DIR, TV_DIR, AUTHORIZED_USERS
 from torrent_manager import TorrentManager
 from jackett import request_jackett, get_torrent_link
 from imdb import get_imdb_info
-from message_formatting import format_torrent_message, human_readable_size, format_torrent_list
+from message_formatting import format_torrent_message, format_torrent_list
 
 # Global variables
 torrent_manager = TorrentManager()
@@ -181,8 +181,9 @@ async def handle_reply(update: Update, context: CallbackContext):
 
             torrent_id = added_torrent.id
             chat_id = update.effective_chat.id
+            torrent_name = added_torrent.name
             sent_message = await update.message.reply_text(
-                "Torrent added successfully to Transmission."
+                f"Torrent added successfully to Transmission. - {torrent_name} (ID: {torrent_id})"
             )
             time.sleep(5)
 
@@ -205,6 +206,104 @@ async def handle_reply(update: Update, context: CallbackContext):
         await update.message.reply_text(
             "Invalid selection. Please reply with a valid index number.", quote=False
         )
+
+
+async def check_torrents(context: CallbackContext):
+    """
+    Periodically check and update the progress of all active torrents.
+    This function runs in the background and updates messages for ongoing downloads.
+    """
+    try:
+        # Iterate through existing tracker messages
+        for torrent_id, chat_dict in list(torrent_messages.items()):
+            try:
+                # Get the torrent details
+                torrent = torrent_manager.get_torrent(torrent_id)
+                progress = torrent.percent_done * 100
+
+                # Get current free space once per torrent to ensure consistency
+                free_space = torrent_manager.get_free_space(DATA_DIR)
+
+                # Store previous progress to avoid unnecessary updates
+                previous_progress = torrent_last_progress.get(torrent_id, -1)
+
+                # Only update if progress has changed by at least 0.5%
+                if abs(progress - previous_progress) < 0.5:
+                    continue
+
+                # Update the progress tracking
+                torrent_last_progress[torrent_id] = progress
+
+                # Update each chat's message for this torrent
+                for chat_id, message_id in list(chat_dict.items()):
+                    try:
+                        # Generate updated message text
+                        message_text = format_torrent_message(torrent, free_space)
+
+                        # Update the message
+                        try:
+                            await context.bot.edit_message_text(
+                                chat_id=chat_id,
+                                message_id=message_id,
+                                text=message_text,
+                            )
+                        except BadRequest as e:
+                            # Ignore "message not modified" errors
+                            if "Message is not modified" not in str(e):
+                                raise
+
+                        # Remove tracking if download is complete
+                        if progress >= 100:
+                            if (
+                                torrent_id in torrent_messages
+                                and chat_id in torrent_messages[torrent_id]
+                            ):
+                                del torrent_messages[torrent_id][chat_id]
+                            if torrent_id in torrent_last_progress:
+                                del torrent_last_progress[torrent_id]
+
+                            # If no more chats are tracking this torrent, clean up
+                            if not torrent_messages.get(torrent_id):
+                                # Try to remove any per-torrent jobs
+                                try:
+                                    jobs = context.job_queue.get_jobs_by_name(
+                                        str(torrent_id)
+                                    )
+                                    for job in jobs:
+                                        job.schedule_removal()
+                                except Exception as job_error:
+                                    print(
+                                        f"Error removing job for torrent {torrent_id}: {job_error}"
+                                    )
+
+                    except Exception as edit_error:
+                        print(
+                            f"Error updating message for torrent {torrent_id} in chat {chat_id}: {edit_error}"
+                        )
+                        # Clean up tracking if message update fails
+                        if (
+                            torrent_id in torrent_messages
+                            and chat_id in torrent_messages[torrent_id]
+                        ):
+                            try:
+                                # Try to delete the message if we can't update it
+                                await context.bot.delete_message(
+                                    chat_id=chat_id, message_id=message_id
+                                )
+                            except Exception:
+                                pass  # Ignore errors when deleting
+                            del torrent_messages[torrent_id][chat_id]
+
+            except Exception as torrent_error:
+                print(f"Error getting torrent {torrent_id}: {torrent_error}")
+                # Remove tracking for this torrent if it can't be retrieved
+                if torrent_id in torrent_messages:
+                    del torrent_messages[torrent_id]
+                if torrent_id in torrent_last_progress:
+                    del torrent_last_progress[torrent_id]
+
+    except Exception as global_error:
+        print(f"Error in check_torrents: {global_error}")
 
 
 @authorized_only
@@ -274,10 +373,10 @@ async def list_torrents(update: Update, context: CallbackContext):
     """List all torrents in the client."""
     torrents = torrent_manager.get_all_torrents()
     free_space = torrent_manager.get_free_space(DATA_DIR)
-    
+
     # Get formatted messages
     messages = format_torrent_list(torrents, free_space)
-    
+
     # Send each formatted message
     for message in messages:
         await update.message.reply_text(message, parse_mode="HTML", quote=False)
