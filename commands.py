@@ -8,7 +8,7 @@ from config import DATA_DIR, MOVIES_DIR, TV_DIR, AUTHORIZED_USERS
 from torrent_manager import TorrentManager
 from jackett import request_jackett, get_torrent_link
 from imdb import get_imdb_info
-from message_formatting import format_torrent_message, human_readable_size
+from message_formatting import format_torrent_message, human_readable_size, format_torrent_list
 
 # Global variables
 torrent_manager = TorrentManager()
@@ -273,41 +273,14 @@ async def add_torrent(update: Update, context: CallbackContext):
 async def list_torrents(update: Update, context: CallbackContext):
     """List all torrents in the client."""
     torrents = torrent_manager.get_all_torrents()
-
-    if not torrents:
-        await update.message.reply_text(
-            "No torrents found.", parse_mode="HTML", quote=False
-        )
-        return
-
-    # Group torrents into chunks of 10
-    chunk_size = 10
-    torrent_chunks = [
-        torrents[i : i + chunk_size] for i in range(0, len(torrents), chunk_size)
-    ]
-
-    # Send each chunk as a separate message
-    for i, chunk in enumerate(torrent_chunks):
-        response_message = f"<b>Torrents ({i*chunk_size + 1}-{i*chunk_size + len(chunk)} of {len(torrents)}):</b>\n\n"
-
-        # Add torrents to the message with nice formatting and line breaks
-        for torrent in chunk:
-            progress_percent = torrent.percent_done * 100
-            torrent_size = human_readable_size(torrent.total_size)
-
-            # Format each torrent with clear separation
-            response_message += f"<code>ID: {torrent.id}</code>\n"
-            response_message += f"<b>{torrent.name}</b>\n"
-            response_message += f"<code>Progress: {progress_percent:.2f}% | Size: {torrent_size}</code>\n\n"
-
-        # Add free space information to the last message
-        if i == len(torrent_chunks) - 1:
-            free = torrent_manager.get_free_space(DATA_DIR)
-            response_message += f"<b>Free Space: {human_readable_size(free)}</b>"
-
-        await update.message.reply_text(
-            response_message, parse_mode="HTML", quote=False
-        )
+    free_space = torrent_manager.get_free_space(DATA_DIR)
+    
+    # Get formatted messages
+    messages = format_torrent_list(torrents, free_space)
+    
+    # Send each formatted message
+    for message in messages:
+        await update.message.reply_text(message, parse_mode="HTML", quote=False)
 
 
 @authorized_only
