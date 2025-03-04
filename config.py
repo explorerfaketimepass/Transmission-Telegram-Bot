@@ -36,9 +36,6 @@ DATA_DIR = os.getenv("DATA_DIR", "/data")
 MOVIES_DIR = os.getenv("MOVIES_DIR", f"{DATA_DIR}/completed/Movies")
 TV_DIR = os.getenv("TV_DIR", f"{DATA_DIR}/completed/TV")
 
-# Data storage files
-TORRENTS_FILE = os.getenv("TORRENTS_FILE", "torrents_data.json")
-USERS_FILE = os.getenv("USERS_FILE", "users_data.json")
 
 # Retry settings for Transmission connection
 MAX_RETRIES = int(os.getenv("MAX_RETRIES", 30))

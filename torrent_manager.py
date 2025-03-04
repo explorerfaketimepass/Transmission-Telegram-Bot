@@ -6,7 +6,6 @@ from config import (
     TRANSMISSION_PORT,
     MAX_RETRIES,
     RETRY_DELAY,
-    TORRENTS_FILE,
     TRANSMISSION_USERNAME,
     TRANSMISSION_PASSWORD,
     TRANSMISSION_PROTOCOL,
@@ -18,7 +17,6 @@ class TorrentManager:
 
     def __init__(self):
         self.client = self._connect_to_transmission()
-        self.torrents_dict = self._load_torrents_data()
 
     def _connect_to_transmission(self):
         """Connect to Transmission client with retry logic."""
@@ -41,19 +39,6 @@ class TorrentManager:
                     time.sleep(RETRY_DELAY)
                 else:
                     raise e
-
-    def _load_torrents_data(self):
-        """Load torrent data from file."""
-        try:
-            with open(TORRENTS_FILE, "r") as file:
-                return json.load(file)
-        except (FileNotFoundError, json.JSONDecodeError):
-            return {}
-
-    def _save_torrents_data(self):
-        """Save torrent data to file."""
-        with open(TORRENTS_FILE, "w") as file:
-            json.dump(self.torrents_dict, file, indent=4)
 
     def add_torrent(self, torrent_link):
         """Add a torrent to Transmission."""
