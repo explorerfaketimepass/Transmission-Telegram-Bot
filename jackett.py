@@ -1,4 +1,5 @@
-import requests
+import aiohttp
+import asyncio
 from prettytable import PrettyTable
 import textwrap
 from config import JACKETT_URL, JACKETT_TOKEN
@@ -26,8 +27,8 @@ def human_readable_size(size, decimal_places=2):
     return f"{size:.{decimal_places}f} {unit}"
 
 
-def request_jackett(query):
-    """Search for torrents using Jackett API."""
+async def request_jackett(query):
+    """Search for torrents using Jackett API asynchronously."""
     print(f"Querying Jackett... {query}")
     token = get_jackett_token()
 
@@ -35,13 +36,13 @@ def request_jackett(query):
     url = f"{get_jackett_url()}/api/v2.0/indexers/all/results"
 
     try:
-        response = requests.get(url, params=params)
-        response.raise_for_status()
-
-        data = response.json()
-        formatted_results, results = format_search_results(data)
-        return (formatted_results, results)
-    except requests.exceptions.RequestException as e:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, params=params) as response:
+                response.raise_for_status()
+                data = await response.json()
+                formatted_results, results = format_search_results(data)
+                return (formatted_results, results)
+    except aiohttp.ClientError as e:
         return (f"Error querying Jackett: {str(e)}", None)
 
 
@@ -75,3 +76,15 @@ def get_torrent_link(index, results):
         return torrent.get("MagnetUri") or torrent.get("Link")
     else:
         raise IndexError("Invalid torrent index")
+
+
+# This function is a helper for commands.py to download a torrent file
+async def download_torrent_file(url):
+    """Download a torrent file asynchronously."""
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as response:
+                response.raise_for_status()
+                return await response.read()
+    except aiohttp.ClientError as e:
+        raise ValueError(f"Failed to download torrent file: {e}")

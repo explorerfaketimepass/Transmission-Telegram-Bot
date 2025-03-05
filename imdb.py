@@ -1,4 +1,4 @@
-import requests
+import aiohttp
 from urllib.parse import urlparse, unquote
 from config import OMDB_TOKEN
 
@@ -21,20 +21,22 @@ def extract_imdb_id(imdb_url):
         raise ValueError("Couldn't find the IMDb ID from the URL")
 
 
-def get_imdb_info(imdb_url):
-    """Get movie/show information from IMDb URL using OMDB API."""
+async def get_imdb_info(imdb_url):
+    """Get movie/show information from IMDb URL using OMDB API asynchronously."""
     try:
         imdb_id = extract_imdb_id(imdb_url)
         token = get_omdb_token()
         omdb_url = f"http://www.omdbapi.com/?apikey={token}&i={imdb_id}"
-        response = requests.get(omdb_url)
-        response.raise_for_status()
 
-        data = response.json()
-        if data.get("Response") == "True":
-            return f"{data.get('Title')} {data.get('Year')}"
-        else:
-            return data.get("Error")
+        async with aiohttp.ClientSession() as session:
+            async with session.get(omdb_url) as response:
+                response.raise_for_status()
+                data = await response.json()
+
+                if data.get("Response") == "True":
+                    return f"{data.get('Title')} {data.get('Year')}"
+                else:
+                    return data.get("Error")
 
     except Exception as e:
         return str(e)

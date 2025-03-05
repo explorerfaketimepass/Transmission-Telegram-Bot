@@ -1,12 +1,12 @@
 import time
-import requests
+import asyncio
 import traceback
 from telegram import Update
 from telegram.ext import CallbackContext
 from telegram.error import BadRequest
 from config import DATA_DIR, MOVIES_DIR, TV_DIR, AUTHORIZED_USERS
 from torrent_manager import TorrentManager
-from jackett import request_jackett, get_torrent_link
+from jackett import request_jackett, get_torrent_link, download_torrent_file
 from imdb import get_imdb_info
 from message_formatting import format_torrent_message, format_torrent_list
 
@@ -34,7 +34,7 @@ def authorized_only(func):
 async def update_torrent_progress(chat_id, torrent_id, context: CallbackContext):
     """Update the progress of a specific torrent."""
     try:
-        torrent = torrent_manager.get_torrent(torrent_id)
+        torrent = await torrent_manager.get_torrent(torrent_id)
         progress = torrent.percent_done * 100
 
         # Check if progress has changed since last update
@@ -44,15 +44,18 @@ async def update_torrent_progress(chat_id, torrent_id, context: CallbackContext)
         ):
             return  # Skip updating if progress hasn't changed
 
-        message_text = format_torrent_message(
-            torrent, torrent_manager.get_free_space(DATA_DIR)
-        )
+        free_space = await torrent_manager.get_free_space(DATA_DIR)
+        message_text = format_torrent_message(torrent, free_space)
 
         if torrent_id in torrent_messages and chat_id in torrent_messages[torrent_id]:
             message_id = torrent_messages[torrent_id][chat_id]
-            await context.bot.edit_message_text(
-                chat_id=chat_id, message_id=message_id, text=message_text
-            )
+            try:
+                await context.bot.edit_message_text(
+                    chat_id=chat_id, message_id=message_id, text=message_text
+                )
+            except BadRequest as e:
+                if "Message is not modified" not in str(e):
+                    raise
         else:
             sent_message = await context.bot.send_message(
                 chat_id=chat_id, text=message_text
@@ -115,7 +118,7 @@ async def search(update: Update, context: CallbackContext):
                 f"Searching for torrents... {query}", parse_mode="HTML", quote=False
             )
 
-            formatted_results, results = request_jackett(query)
+            formatted_results, results = await request_jackett(query)
             if not formatted_results:
                 response_message = "`No results found.`"
             else:
@@ -161,13 +164,12 @@ async def handle_reply(update: Update, context: CallbackContext):
         # Adding the torrent to Transmission
         try:
             if torrent_link.startswith("magnet:"):
-                added_torrent = torrent_manager.add_torrent(torrent_link)
+                added_torrent = await torrent_manager.add_torrent(torrent_link)
             else:
-                # Handle non-magnet links
+                # Handle non-magnet links - download the torrent file first
                 try:
-                    torrent_response = requests.get(torrent_link)
-                    torrent_response.raise_for_status()
-                    added_torrent = torrent_manager.add_torrent(torrent_link)
+                    torrent_data = await download_torrent_file(torrent_link)
+                    added_torrent = await torrent_manager.add_torrent(torrent_data)
                 except Exception as e:
                     # Try to extract magnet link from error
                     error_str = str(e)
@@ -175,7 +177,7 @@ async def handle_reply(update: Update, context: CallbackContext):
                         magnet_link = (
                             "magnet:?" + error_str.split("magnet:?")[1].split(" ")[0]
                         )
-                        added_torrent = torrent_manager.add_torrent(magnet_link)
+                        added_torrent = await torrent_manager.add_torrent(magnet_link)
                     else:
                         raise
 
@@ -186,7 +188,7 @@ async def handle_reply(update: Update, context: CallbackContext):
                 f"Torrent added successfully to Transmission. - {torrent_name} (ID: {torrent_id})"
             )
 
-            start_monitoring(context)
+            await start_monitoring(context)
 
             # Store the initial message ID
             if torrent_id not in torrent_messages:
@@ -217,7 +219,6 @@ monitoring_active = False  # Flag to track if monitoring is currently running
 async def check_torrents(context: CallbackContext):
     """
     Periodically check and update the progress of all active torrents.
-    This function runs in the background and updates messages for ongoing downloads.
     """
     global monitoring_active
 
@@ -226,16 +227,6 @@ async def check_torrents(context: CallbackContext):
         if not torrent_messages:
             print("No torrents being tracked. Stopping monitoring job.")
             monitoring_active = False
-
-            # remove the message tracking
-            for torrent_id, chat_dict in list(torrent_messages.items()):
-                for chat_id, message_id in chat_dict.items():
-                    try:
-                        await context.bot.delete_message(
-                            chat_id=chat_id, message_id=message_id
-                        )
-                    except Exception:
-                        pass
 
             # Find and remove the check_torrents job
             jobs = context.job_queue.get_jobs_by_name("check_torrents")
@@ -247,11 +238,11 @@ async def check_torrents(context: CallbackContext):
         for torrent_id, chat_dict in list(torrent_messages.items()):
             try:
                 # Get the torrent details
-                torrent = torrent_manager.get_torrent(torrent_id)
+                torrent = await torrent_manager.get_torrent(torrent_id)
                 progress = torrent.percent_done * 100
 
                 # Get current free space once per torrent to ensure consistency
-                free_space = torrent_manager.get_free_space(DATA_DIR)
+                free_space = await torrent_manager.get_free_space(DATA_DIR)
 
                 # Store previous progress to avoid unnecessary updates
                 previous_progress = torrent_last_progress.get(torrent_id, -1)
@@ -333,9 +324,10 @@ async def check_torrents(context: CallbackContext):
 
     except Exception as global_error:
         print(f"Error in check_torrents: {global_error}")
+        # Don't stop monitoring due to a transient error
 
 
-def start_monitoring(context: CallbackContext):
+async def start_monitoring(context: CallbackContext):
     """Start the torrent monitoring if it's not already running."""
     global monitoring_active
 
@@ -352,10 +344,10 @@ async def imdb(update: Update, context: CallbackContext):
     """Get movie info from IMDb and search for torrents."""
     if len(context.args) == 1:
         link = context.args[0]
-        search_query = get_imdb_info(link)
+        search_query = await get_imdb_info(link)
         await update.message.reply_text(f"Searching for: {search_query}")
 
-        formatted_results, results = request_jackett(search_query)
+        formatted_results, results = await request_jackett(search_query)
         if not formatted_results:
             response_message = "`No results found.`"
             await update.message.reply_text(
@@ -380,7 +372,7 @@ async def add_torrent(update: Update, context: CallbackContext):
         link = context.args[0]
         if link.startswith("magnet:") or link.endswith(".torrent"):
             try:
-                added_torrent = torrent_manager.add_torrent(link)
+                added_torrent = await torrent_manager.add_torrent(link)
                 torrent_id = added_torrent.id
                 chat_id = update.effective_chat.id
 
@@ -389,14 +381,13 @@ async def add_torrent(update: Update, context: CallbackContext):
                     "Torrent added successfully to Transmission."
                 )
 
-                # Wait briefly to let Transmission start processing
-                time.sleep(1)
+                # Give Transmission a moment to start processing
+                await asyncio.sleep(1)
 
                 # Get the torrent details and update the message
-                torrent = torrent_manager.get_torrent(torrent_id)
-                message_text = format_torrent_message(
-                    torrent, torrent_manager.get_free_space(DATA_DIR)
-                )
+                torrent = await torrent_manager.get_torrent(torrent_id)
+                free_space = await torrent_manager.get_free_space(DATA_DIR)
+                message_text = format_torrent_message(torrent, free_space)
 
                 try:
                     await context.bot.edit_message_text(
@@ -417,7 +408,7 @@ async def add_torrent(update: Update, context: CallbackContext):
                 torrent_last_progress[torrent_id] = torrent.percent_done * 100
 
                 # Start monitoring if not already running
-                start_monitoring(context)
+                await start_monitoring(context)
 
             except Exception as e:
                 await update.message.reply_text(f"Failed to add torrent: {e}")
@@ -432,8 +423,8 @@ async def add_torrent(update: Update, context: CallbackContext):
 @authorized_only
 async def list_torrents(update: Update, context: CallbackContext):
     """List all torrents in the client."""
-    torrents = torrent_manager.get_all_torrents()
-    free_space = torrent_manager.get_free_space(DATA_DIR)
+    torrents = await torrent_manager.get_all_torrents()
+    free_space = await torrent_manager.get_free_space(DATA_DIR)
 
     # Get formatted messages
     messages = format_torrent_list(torrents, free_space)
@@ -449,8 +440,8 @@ async def delete_torrent(update: Update, context: CallbackContext):
     if len(context.args) == 1:
         try:
             torrent_id = int(context.args[0])
-            torrent = torrent_manager.get_torrent(torrent_id)
-            torrent_manager.remove_torrent(torrent_id, delete_data=True)
+            torrent = await torrent_manager.get_torrent(torrent_id)
+            await torrent_manager.remove_torrent(torrent_id, delete_data=True)
             await update.message.reply_text(
                 f"Torrent {torrent.name} deleted successfully."
             )
@@ -466,8 +457,8 @@ async def start_torrent(update: Update, context: CallbackContext):
     if len(context.args) == 1:
         try:
             torrent_id = int(context.args[0])
-            torrent = torrent_manager.get_torrent(torrent_id)
-            torrent_manager.start_torrent(torrent_id)
+            torrent = await torrent_manager.get_torrent(torrent_id)
+            await torrent_manager.start_torrent(torrent_id)
             await update.message.reply_text(
                 f"Torrent {torrent.name} started successfully."
             )
@@ -483,8 +474,8 @@ async def stop_torrent(update: Update, context: CallbackContext):
     if len(context.args) == 1:
         try:
             torrent_id = int(context.args[0])
-            torrent = torrent_manager.get_torrent(torrent_id)
-            torrent_manager.stop_torrent(torrent_id)
+            torrent = await torrent_manager.get_torrent(torrent_id)
+            await torrent_manager.stop_torrent(torrent_id)
             await update.message.reply_text(
                 f"Torrent {torrent.name} stopped successfully."
             )
@@ -500,8 +491,8 @@ async def move_to_movie(update: Update, context: CallbackContext):
     if len(context.args) == 1:
         try:
             torrent_id = int(context.args[0])
-            torrent = torrent_manager.get_torrent(torrent_id)
-            torrent_manager.move_torrent_data(torrent_id, MOVIES_DIR)
+            torrent = await torrent_manager.get_torrent(torrent_id)
+            await torrent_manager.move_torrent_data(torrent_id, MOVIES_DIR)
             await update.message.reply_text(
                 f"Torrent {torrent.name} moved to Movies directory."
             )
@@ -517,8 +508,8 @@ async def move_to_tv(update: Update, context: CallbackContext):
     if len(context.args) == 1:
         try:
             torrent_id = int(context.args[0])
-            torrent = torrent_manager.get_torrent(torrent_id)
-            torrent_manager.move_torrent_data(torrent_id, TV_DIR)
+            torrent = await torrent_manager.get_torrent(torrent_id)
+            await torrent_manager.move_torrent_data(torrent_id, TV_DIR)
             await update.message.reply_text(
                 f"Torrent {torrent.name} moved to TV directory."
             )
