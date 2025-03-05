@@ -1,5 +1,5 @@
-from telegram.ext import Application, CommandHandler, MessageHandler
-from telegram.ext.filters import REPLY
+from telegram.ext import Application, CommandHandler, MessageHandler, filters
+from telegram.ext import JobQueue
 from telegram import BotCommand
 from commands import (
     search,
@@ -63,18 +63,17 @@ async def post_init(app: Application):
 
 def main():
     """Start the bot."""
-    # Set up the Application with concurrency settings and proper timeouts
+    # Set up the Application with concurrency settings, proper timeouts, and job queue
     application = (
         Application.builder()
         .token(TELEGRAM_TOKEN)
         .post_init(post_init)
-        # Configure concurrency settings
         .concurrent_updates(True)  # Enable concurrent updates
         .connection_pool_size(16)  # Increase connection pool size
-        # Configure timeouts properly (using the recommended approach)
         .get_updates_read_timeout(30.0)
         .get_updates_write_timeout(30.0)
         .get_updates_connect_timeout(30.0)
+        .job_queue(JobQueue())
         .build()
     )
 
@@ -100,7 +99,7 @@ def main():
     application.add_handler(CommandHandler("delete", delete_torrent))
     application.add_handler(CommandHandler("del", delete_torrent))
     # Handle replies to search results
-    application.add_handler(MessageHandler(REPLY, handle_reply))
+    application.add_handler(MessageHandler(filters.REPLY, handle_reply))
     # Move torrents to directories
     application.add_handler(CommandHandler("movie", move_to_movie))
     application.add_handler(CommandHandler("tv", move_to_tv))
@@ -112,9 +111,19 @@ def main():
     # Torrent info command
     application.add_handler(CommandHandler("info", info_torrent))
 
-    # Run the bot with polling (without deprecated pool_timeout)
+    # Add error handler
+    application.add_error_handler(error_handler)
+
+    # Run the bot with polling
     print("Starting bot with concurrent updates enabled")
     application.run_polling(allowed_updates=["message", "callback_query"])
+
+
+async def error_handler(update, context):
+    """Handle errors."""
+    print(f"An error occurred: {context.error}")
+    # Log the error before we do anything else
+    print(f"Update {update} caused error {context.error}")
 
 
 if __name__ == "__main__":
