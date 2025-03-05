@@ -13,7 +13,7 @@ from commands import (
     move_to_movie,
     move_to_tv,
     help_command,
-    check_torrents,
+    torrent_manager,
 )
 from config import TELEGRAM_TOKEN
 
@@ -45,11 +45,36 @@ async def set_commands(app: Application):
     await app.bot.set_my_commands(commands)
 
 
+async def post_init(app: Application):
+    """Run post-initialization tasks."""
+    # Set up bot commands
+    await set_commands(app)
+
+    # Initialize the torrent manager
+    try:
+        # Establish connection to Transmission before accepting commands
+        await torrent_manager.ensure_connected()
+        print("Torrent manager initialized successfully")
+    except Exception as e:
+        print(f"Error initializing torrent manager: {e}")
+        # We'll let the application continue, and retry connections later
+
+
 def main():
     """Start the bot."""
-    # Set up the Application
+    # Set up the Application with concurrency settings and proper timeouts
     application = (
-        Application.builder().token(TELEGRAM_TOKEN).post_init(set_commands).build()
+        Application.builder()
+        .token(TELEGRAM_TOKEN)
+        .post_init(post_init)
+        # Configure concurrency settings
+        .concurrent_updates(True)  # Enable concurrent updates
+        .connection_pool_size(16)  # Increase connection pool size
+        # Configure timeouts properly (using the recommended approach)
+        .get_updates_read_timeout(30.0)
+        .get_updates_write_timeout(30.0)
+        .get_updates_connect_timeout(30.0)
+        .build()
     )
 
     # Add handlers
@@ -78,10 +103,9 @@ def main():
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("h", help_command))
 
-    # Update torrents
-
-    # Run the bot
-    application.run_polling()
+    # Run the bot with polling (without deprecated pool_timeout)
+    print("Starting bot with concurrent updates enabled")
+    application.run_polling(allowed_updates=["message", "callback_query"])
 
 
 if __name__ == "__main__":
