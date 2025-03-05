@@ -465,7 +465,9 @@ async def start_torrent(update: Update, context: CallbackContext):
         except Exception as e:
             await update.message.reply_text(f"Failed to start torrent: {e}")
     else:
-        await update.message.reply_text("Usage: /start <torrent_id>")
+        await update.message.reply_text(
+            "Usage: /start <torrent_id> \n /help for more more commands"
+        )
 
 
 @authorized_only
@@ -539,3 +541,21 @@ async def help_command(update: Update, context: CallbackContext):
 💬 */help* - *Shows this help message*.
 """
     await update.message.reply_text(help_message, parse_mode="Markdown", quote=False)
+
+
+@authorized_only
+async def info_torrent(update: Update, context: CallbackContext):
+    """Get info about a specific torrent."""
+    if len(context.args) == 1:
+        try:
+            torrent_id = int(context.args[0])
+            torrent = await torrent_manager.get_torrent(torrent_id)
+            free_space = await torrent_manager.get_free_space(DATA_DIR)
+            message_text = format_torrent_message(torrent, free_space)
+            await update.message.reply_text(
+                message_text, parse_mode="HTML", quote=False
+            )
+        except Exception as e:
+            await update.message.reply_text(f"Failed to get torrent info: {e}")
+    else:
+        await update.message.reply_text("Usage: /info <torrent_id>")

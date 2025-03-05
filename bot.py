@@ -14,6 +14,7 @@ from commands import (
     move_to_tv,
     help_command,
     torrent_manager,
+    info_torrent,
 )
 from config import TELEGRAM_TOKEN
 
@@ -80,10 +81,15 @@ def main():
     # Add handlers
     # Search for torrents
     application.add_handler(CommandHandler("search", search))
+    application.add_handler(CommandHandler("s", search))
     # Fetch IMDB link info and search for torrents
     application.add_handler(CommandHandler("imdb", imdb))
     # Add torrents using magnet links or torrent files
     application.add_handler(CommandHandler("torrent", add_torrent))
+    application.add_handler(CommandHandler("t", add_torrent))
+    application.add_handler(CommandHandler("magnet", add_torrent))
+    application.add_handler(CommandHandler("m", add_torrent))
+    application.add_handler(CommandHandler("add", add_torrent))
     # List torrents
     application.add_handler(CommandHandler("list", list_torrents))
     application.add_handler(CommandHandler("ls", list_torrents))
@@ -92,6 +98,7 @@ def main():
     application.add_handler(CommandHandler("stop", stop_torrent))
     # Delete torrents
     application.add_handler(CommandHandler("delete", delete_torrent))
+    application.add_handler(CommandHandler("del", delete_torrent))
     # Handle replies to search results
     application.add_handler(MessageHandler(REPLY, handle_reply))
     # Move torrents to directories
@@ -102,6 +109,8 @@ def main():
     # Help command
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("h", help_command))
+    # Torrent info command
+    application.add_handler(CommandHandler("info", info_torrent))
 
     # Run the bot with polling (without deprecated pool_timeout)
     print("Starting bot with concurrent updates enabled")
