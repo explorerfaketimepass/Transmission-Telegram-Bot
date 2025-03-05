@@ -9,6 +9,7 @@ from commands import (
     list_torrents,
     delete_torrent,
     start_torrent,
+    force_start_torrent,
     stop_torrent,
     move_to_movie,
     move_to_tv,
@@ -95,6 +96,8 @@ def main():
     # Start and stop torrents
     application.add_handler(CommandHandler("start", start_torrent))
     application.add_handler(CommandHandler("stop", stop_torrent))
+    application.add_handler(CommandHandler("forcestart", force_start_torrent))
+    application.add_handler(CommandHandler("fs", force_start_torrent))
     # Delete torrents
     application.add_handler(CommandHandler("delete", delete_torrent))
     application.add_handler(CommandHandler("del", delete_torrent))

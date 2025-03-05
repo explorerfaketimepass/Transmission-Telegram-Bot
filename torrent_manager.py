@@ -154,3 +154,14 @@ class TorrentManager:
     def _get_free_space_sync(self, client, directory):
         """Get free space synchronously (runs in thread pool)."""
         return client.free_space(directory)
+
+    # force start torrent
+    async def force_start_torrent(self, torrent_id):
+        """Force start a torrent."""
+        client = await self.ensure_connected()
+        await self._force_start_torrent_sync(client, torrent_id)
+
+    @run_in_executor
+    def _force_start_torrent_sync(self, client, torrent_id):
+        """Force start torrent synchronously (runs in thread pool)."""
+        client.start_torrent(ids=torrent_id, bypass_queue=True)

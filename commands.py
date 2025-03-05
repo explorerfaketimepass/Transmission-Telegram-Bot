@@ -496,6 +496,25 @@ async def start_torrent(update: Update, context: CallbackContext):
 
 
 @authorized_only
+async def force_start_torrent(update: Update, context: CallbackContext):
+    """Start a paused torrent by ID."""
+    if len(context.args) == 1:
+        try:
+            torrent_id = int(context.args[0])
+            torrent = await torrent_manager.get_torrent(torrent_id)
+            await torrent_manager.force_start_torrent(torrent_id)
+            await update.message.reply_text(
+                f"Torrent {torrent.name} force started successfully."
+            )
+        except Exception as e:
+            await update.message.reply_text(f"Failed to force start torrent: {e}")
+    else:
+        await update.message.reply_text(
+            "Usage: /start <torrent_id> \n /help for more more commands"
+        )
+
+
+@authorized_only
 async def stop_torrent(update: Update, context: CallbackContext):
     """Stop a torrent by ID."""
     if len(context.args) == 1:
