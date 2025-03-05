@@ -436,19 +436,44 @@ async def list_torrents(update: Update, context: CallbackContext):
 
 @authorized_only
 async def delete_torrent(update: Update, context: CallbackContext):
-    """Delete a torrent by ID."""
-    if len(context.args) == 1:
+    """Delete one or multiple torrents by ID(s)."""
+    if not context.args:
+        await update.message.reply_text(
+            "Usage: /delete <torrent_id> [torrent_id2 torrent_id3 ...]"
+        )
+        return
+
+    success_count = 0
+    failed_count = 0
+    success_names = []
+
+    for arg in context.args:
         try:
-            torrent_id = int(context.args[0])
+            torrent_id = int(arg)
             torrent = await torrent_manager.get_torrent(torrent_id)
             await torrent_manager.remove_torrent(torrent_id, delete_data=True)
-            await update.message.reply_text(
-                f"Torrent {torrent.name} deleted successfully."
-            )
+            success_count += 1
+            success_names.append(f"{torrent.name} (ID: {torrent_id})")
+
+            # Clean up tracking data if the torrent was being monitored
+            if torrent_id in torrent_messages:
+                del torrent_messages[torrent_id]
+            if torrent_id in torrent_last_progress:
+                del torrent_last_progress[torrent_id]
+
         except Exception as e:
-            await update.message.reply_text(f"Failed to delete torrent: {e}")
-    else:
-        await update.message.reply_text("Usage: /delete <torrent_id>")
+            failed_count += 1
+            await update.message.reply_text(f"Failed to delete torrent {arg}: {e}")
+
+    # Report results
+    if success_count > 0:
+        names_text = "\n- ".join(success_names)
+        await update.message.reply_text(
+            f"Successfully deleted {success_count} torrent{'s' if success_count > 1 else ''}:\n- {names_text}"
+        )
+
+    if failed_count == 0 and success_count == 0:
+        await update.message.reply_text("No valid torrent IDs provided.")
 
 
 @authorized_only
