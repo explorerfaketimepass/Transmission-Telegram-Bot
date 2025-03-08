@@ -43,6 +43,11 @@ async def set_commands(app: Application):
         BotCommand(command="torrent", description="Add a torrent using a magnet link."),
         BotCommand(command="ls", description="Same as /list"),
         BotCommand(command="h", description="To see all commands"),
+        BotCommand(command="info", description="Get information about a torrent"),
+        BotCommand(
+            command="forcestart", description="Force start a torrent using its id."
+        ),
+        BotCommand(command="fs", description="Same as /forcestart"),
     ]
     await app.bot.set_my_commands(commands)
 
@@ -86,9 +91,7 @@ def main():
     application.add_handler(CommandHandler("imdb", imdb))
     # Add torrents using magnet links or torrent files
     application.add_handler(CommandHandler("torrent", add_torrent))
-    application.add_handler(CommandHandler("t", add_torrent))
     application.add_handler(CommandHandler("magnet", add_torrent))
-    application.add_handler(CommandHandler("m", add_torrent))
     application.add_handler(CommandHandler("add", add_torrent))
     # List torrents
     application.add_handler(CommandHandler("list", list_torrents))

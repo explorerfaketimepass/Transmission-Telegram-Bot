@@ -478,57 +478,122 @@ async def delete_torrent(update: Update, context: CallbackContext):
 
 @authorized_only
 async def start_torrent(update: Update, context: CallbackContext):
-    """Start a paused torrent by ID."""
-    if len(context.args) == 1:
+    """Start one or multiple paused torrents by ID."""
+    if not context.args:
+        await update.message.reply_text(
+            "Usage: /start <torrent_id> [torrent_id2 torrent_id3 ...]"
+        )
+        return
+
+    success_count = 0
+    failed_count = 0
+    success_names = []
+
+    for arg in context.args:
         try:
-            torrent_id = int(context.args[0])
+            torrent_id = int(arg)
             torrent = await torrent_manager.get_torrent(torrent_id)
             await torrent_manager.start_torrent(torrent_id)
-            await update.message.reply_text(
-                f"Torrent {torrent.name} started successfully."
-            )
+            success_count += 1
+            success_names.append(f"{torrent.name} (ID: {torrent_id})")
         except Exception as e:
-            await update.message.reply_text(f"Failed to start torrent: {e}")
-    else:
-        await update.message.reply_text(
-            "Usage: /start <torrent_id> \n /help for more more commands"
-        )
+            failed_count += 1
+            await update.message.reply_text(f"Failed to start torrent {arg}: {e}")
+
+    # Report results
+    if success_count > 0:
+        if success_count == 1:
+            await update.message.reply_text(
+                f"Torrent {success_names[0]} started successfully."
+            )
+        else:
+            names_text = "\n- ".join(success_names)
+            await update.message.reply_text(
+                f"Successfully started {success_count} torrents:\n- {names_text}"
+            )
+
+    if failed_count == 0 and success_count == 0:
+        await update.message.reply_text("No valid torrent IDs provided.")
 
 
 @authorized_only
 async def force_start_torrent(update: Update, context: CallbackContext):
-    """Start a paused torrent by ID."""
-    if len(context.args) == 1:
+    """Force start one or multiple torrents by ID."""
+    if not context.args:
+        await update.message.reply_text(
+            "Usage: /force_start <torrent_id> [torrent_id2 torrent_id3 ...]"
+        )
+        return
+
+    success_count = 0
+    failed_count = 0
+    success_names = []
+
+    for arg in context.args:
         try:
-            torrent_id = int(context.args[0])
+            torrent_id = int(arg)
             torrent = await torrent_manager.get_torrent(torrent_id)
             await torrent_manager.force_start_torrent(torrent_id)
-            await update.message.reply_text(
-                f"Torrent {torrent.name} force started successfully."
-            )
+            success_count += 1
+            success_names.append(f"{torrent.name} (ID: {torrent_id})")
         except Exception as e:
-            await update.message.reply_text(f"Failed to force start torrent: {e}")
-    else:
-        await update.message.reply_text(
-            "Usage: /start <torrent_id> \n /help for more more commands"
-        )
+            failed_count += 1
+            await update.message.reply_text(f"Failed to force start torrent {arg}: {e}")
+
+    # Report results
+    if success_count > 0:
+        if success_count == 1:
+            await update.message.reply_text(
+                f"Torrent {success_names[0]} force started successfully."
+            )
+        else:
+            names_text = "\n- ".join(success_names)
+            await update.message.reply_text(
+                f"Successfully force started {success_count} torrents:\n- {names_text}"
+            )
+
+    if failed_count == 0 and success_count == 0:
+        await update.message.reply_text("No valid torrent IDs provided.")
 
 
 @authorized_only
 async def stop_torrent(update: Update, context: CallbackContext):
-    """Stop a torrent by ID."""
-    if len(context.args) == 1:
+    """Stop one or multiple torrents by ID."""
+    if not context.args:
+        await update.message.reply_text(
+            "Usage: /stop <torrent_id> [torrent_id2 torrent_id3 ...]"
+        )
+        return
+
+    success_count = 0
+    failed_count = 0
+    success_names = []
+
+    for arg in context.args:
         try:
-            torrent_id = int(context.args[0])
+            torrent_id = int(arg)
             torrent = await torrent_manager.get_torrent(torrent_id)
             await torrent_manager.stop_torrent(torrent_id)
-            await update.message.reply_text(
-                f"Torrent {torrent.name} stopped successfully."
-            )
+            success_count += 1
+            success_names.append(f"{torrent.name} (ID: {torrent_id})")
         except Exception as e:
-            await update.message.reply_text(f"Failed to stop torrent: {e}")
-    else:
-        await update.message.reply_text("Usage: /stop <torrent_id>")
+            failed_count += 1
+            await update.message.reply_text(f"Failed to stop torrent {arg}: {e}")
+
+    # Report results
+    if success_count > 0:
+        if success_count == 1:
+            await update.message.reply_text(
+                f"Torrent {success_names[0]} stopped successfully."
+            )
+        else:
+            names_text = "\n- ".join(success_names)
+            await update.message.reply_text(
+                f"Successfully stopped {success_count} torrents:\n- {names_text}"
+            )
+
+    if failed_count == 0 and success_count == 0:
+        await update.message.reply_text("No valid torrent IDs provided.")
 
 
 @authorized_only
@@ -566,40 +631,58 @@ async def move_to_tv(update: Update, context: CallbackContext):
 
 
 @authorized_only
+async def info_torrent(update: Update, context: CallbackContext):
+    """Get info about a specific torrent and start monitoring its progress."""
+    if len(context.args) == 1:
+        try:
+            torrent_id = int(context.args[0])
+            torrent = await torrent_manager.get_torrent(torrent_id)
+            chat_id = update.effective_chat.id
+
+            # Get initial details
+            free_space = await torrent_manager.get_free_space(DATA_DIR)
+            message_text = format_torrent_message(torrent, free_space)
+
+            # Send initial message
+            sent_message = await update.message.reply_text(
+                message_text, parse_mode="HTML", quote=False
+            )
+
+            # Store the message ID for tracking
+            if torrent_id not in torrent_messages:
+                torrent_messages[torrent_id] = {}
+            torrent_messages[torrent_id][chat_id] = sent_message.message_id
+
+            # Set initial progress tracking
+            torrent_last_progress[torrent_id] = torrent.percent_done * 100
+
+            # Start monitoring if not already running
+            await start_monitoring(context)
+
+        except Exception as e:
+            await update.message.reply_text(f"Failed to get torrent info: {e}")
+    else:
+        await update.message.reply_text("Usage: /info <torrent_id>")
+
+
+@authorized_only
 async def help_command(update: Update, context: CallbackContext):
     """Show help message with available commands."""
     help_message = """
 🌟 *Available Commands* 🌟
 
-1️⃣ */list* - *Lists all torrents* with their IDs and percent-done status. It also shows the *free space*.
-2️⃣ */delete <torrent_id>* - *Deletes a torrent* using its ID.
-3️⃣ */start <torrent_id>* - *Starts a torrent* using its ID.
-4️⃣ */stop <torrent_id>* - *Stops a torrent* using its ID.
-5️⃣ */m <torrent_id>* - *Moves movie* to the *Movies* folder.
-6️⃣ */t <torrent_id>* - *Moves TV series* to the *TV* folder.
-7️⃣ */search <name>* - *Searches* for a movie or TV show (e.g., "The Matrix" or "Simpsons s01e01").
-8️⃣ */imdb <link>* - *Fetches IMDb information* from a given IMDb link and searches it.
-9️⃣ */torrent <magnet_link>* - *Adds a torrent* using a magnet link.
-🔟 */ls* - *Same as* */list*.
+1. */list* or */ls* - *Lists all torrents* with their IDs and progress.
+2. */delete or /del <torrent_id> - *Deletes* one or more torrents.
+3. */start <torrent_id>* - *Starts* a paused torrent.
+4. */force_start or /fs <torrent_id>* - *Force starts* a torrent.
+5. */stop <torrent_id>* - *Stops* a torrent.
+6. */m <torrent_id>* or */movie <id>* - *Move* to *Movies* folder.
+7. */t <torrent_id>* or */tv <id>* - *Move* to *TV* folder.
+8. */search or /s <query>* - *Search* for content (e.g., "The Matrix", "Simpsons s01e01").
+9. */imdb <link>* - Search using *IMDb information*.
+10. */torrent or /magnet or /add <magnet_link>* - *Add* a torrent via magnet link.
+11. */info or /i <torrent_id>* - Get *detailed info* about a torrent.
 
-💬 */help* - *Shows this help message*.
+💬 */help or /h* - *Shows this help message*.
 """
     await update.message.reply_text(help_message, parse_mode="Markdown", quote=False)
-
-
-@authorized_only
-async def info_torrent(update: Update, context: CallbackContext):
-    """Get info about a specific torrent."""
-    if len(context.args) == 1:
-        try:
-            torrent_id = int(context.args[0])
-            torrent = await torrent_manager.get_torrent(torrent_id)
-            free_space = await torrent_manager.get_free_space(DATA_DIR)
-            message_text = format_torrent_message(torrent, free_space)
-            await update.message.reply_text(
-                message_text, parse_mode="HTML", quote=False
-            )
-        except Exception as e:
-            await update.message.reply_text(f"Failed to get torrent info: {e}")
-    else:
-        await update.message.reply_text("Usage: /info <torrent_id>")
