@@ -598,44 +598,99 @@ async def stop_torrent(update: Update, context: CallbackContext):
 
 @authorized_only
 async def move_to_movie(update: Update, context: CallbackContext):
-    """Move a torrent to the Movies directory."""
-    if len(context.args) == 1:
+    """Move one or multiple torrents to the Movies directory."""
+    if not context.args:
+        await update.message.reply_text(
+            "Usage: /movie <torrent_id> [torrent_id2 torrent_id3 ...] or /m <torrent_id> [torrent_id2 ...]"
+        )
+        return
+
+    success_count = 0
+    failed_count = 0
+    success_names = []
+
+    for arg in context.args:
         try:
-            torrent_id = int(context.args[0])
+            torrent_id = int(arg)
             torrent = await torrent_manager.get_torrent(torrent_id)
             await torrent_manager.move_torrent_data(torrent_id, MOVIES_DIR)
-            await update.message.reply_text(
-                f"Torrent {torrent.name} moved to Movies directory."
-            )
+            success_count += 1
+            success_names.append(f"{torrent.name} (ID: {torrent_id})")
         except Exception as e:
-            await update.message.reply_text(f"Failed to move torrent {torrent_id}: {e}")
-    else:
-        await update.message.reply_text("Usage: /movie <torrent_id> or /m <torrent_id>")
+            failed_count += 1
+            await update.message.reply_text(f"Failed to move torrent {arg}: {e}")
+
+    # Report results
+    if success_count > 0:
+        if success_count == 1:
+            await update.message.reply_text(
+                f"Torrent {success_names[0]} moved to Movies directory."
+            )
+        else:
+            names_text = "\n- ".join(success_names)
+            await update.message.reply_text(
+                f"Successfully moved {success_count} torrents to Movies directory:\n- {names_text}"
+            )
+
+    if failed_count == 0 and success_count == 0:
+        await update.message.reply_text("No valid torrent IDs provided.")
 
 
 @authorized_only
 async def move_to_tv(update: Update, context: CallbackContext):
-    """Move a torrent to the TV directory."""
-    if len(context.args) == 1:
+    """Move one or multiple torrents to the TV directory."""
+    if not context.args:
+        await update.message.reply_text(
+            "Usage: /tv <torrent_id> [torrent_id2 torrent_id3 ...] or /t <torrent_id> [torrent_id2 ...]"
+        )
+        return
+
+    success_count = 0
+    failed_count = 0
+    success_names = []
+
+    for arg in context.args:
         try:
-            torrent_id = int(context.args[0])
+            torrent_id = int(arg)
             torrent = await torrent_manager.get_torrent(torrent_id)
             await torrent_manager.move_torrent_data(torrent_id, TV_DIR)
-            await update.message.reply_text(
-                f"Torrent {torrent.name} moved to TV directory."
-            )
+            success_count += 1
+            success_names.append(f"{torrent.name} (ID: {torrent_id})")
         except Exception as e:
-            await update.message.reply_text(f"Failed to move torrent {torrent_id}: {e}")
-    else:
-        await update.message.reply_text("Usage: /tv <torrent_id> or /t <torrent_id>")
+            failed_count += 1
+            await update.message.reply_text(f"Failed to move torrent {arg}: {e}")
+
+    # Report results
+    if success_count > 0:
+        if success_count == 1:
+            await update.message.reply_text(
+                f"Torrent {success_names[0]} moved to TV directory."
+            )
+        else:
+            names_text = "\n- ".join(success_names)
+            await update.message.reply_text(
+                f"Successfully moved {success_count} torrents to TV directory:\n- {names_text}"
+            )
+
+    if failed_count == 0 and success_count == 0:
+        await update.message.reply_text("No valid torrent IDs provided.")
 
 
 @authorized_only
 async def info_torrent(update: Update, context: CallbackContext):
-    """Get info about a specific torrent and start monitoring its progress."""
-    if len(context.args) == 1:
+    """Get info about specific torrents and start monitoring their progress."""
+    if not context.args:
+        await update.message.reply_text(
+            "Usage: /info <torrent_id> [torrent_id2 torrent_id3 ...] or /i <torrent_id> [torrent_id2 ...]"
+        )
+        return
+
+    success_count = 0
+    failed_count = 0
+
+    for arg in context.args:
         try:
-            torrent_id = int(context.args[0])
+            torrent_id = int(arg)
             torrent = await torrent_manager.get_torrent(torrent_id)
             chat_id = update.effective_chat.id
 
@@ -656,13 +711,20 @@ async def info_torrent(update: Update, context: CallbackContext):
             # Set initial progress tracking
             torrent_last_progress[torrent_id] = torrent.percent_done * 100
 
-            # Start monitoring if not already running
-            await start_monitoring(context)
+            success_count += 1
 
         except Exception as e:
-            await update.message.reply_text(f"Failed to get torrent info: {e}")
-    else:
-        await update.message.reply_text("Usage: /info <torrent_id>")
+            failed_count += 1
+            await update.message.reply_text(
+                f"Failed to get info for torrent {arg}: {e}"
+            )
+
+    # Start monitoring if we added any torrents to track
+    if success_count > 0:
+        await start_monitoring(context)
+
+    if failed_count == 0 and success_count == 0:
+        await update.message.reply_text("No valid torrent IDs provided.")
 
 
 @authorized_only
