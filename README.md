@@ -21,7 +21,11 @@ A powerful, feature-rich Telegram bot for searching, downloading, and managing t
 - 📂 **Organized content management** with separate Movie and TV directories
 - 🔒 **User authorization system** to control access to your torrent client
 - 📱 **Beautiful formatting** for Telegram messages
-- 🛠️ **Full torrent management** (add, start, stop, delete)
+- 🛠️ **Full torrent management** (add, start, stop, force start, delete)
+- 📁 **File organization** with commands to move content to appropriate directories
+- 📈 **Torrent statistics** including download speed, ETA, and size
+- 💾 **Disk space monitoring** to prevent storage issues
+- 🔄 **Robust connection handling** with automatic retry mechanisms
 
 ## 📋 Requirements
 
@@ -29,6 +33,7 @@ A powerful, feature-rich Telegram bot for searching, downloading, and managing t
 - Transmission daemon running and accessible
 - Jackett server for torrent searching
 - Telegram bot token (from [@BotFather](https://t.me/botfather))
+- OMDb API key for IMDb lookups
 
 ## 🛠️ Installation
 
@@ -68,7 +73,7 @@ TRANSMISSION_PORT=9091
 # If you are using HTTPS, set the following variable to 'https'
 TRANSMISSION_PROTOCOL=http
 # If you have authentication enabled, set the following two variables to your username and password
-TRANSMISSION_USER=admin
+TRANSMISSION_USERNAME=admin
 TRANSMISSION_PASSWORD=admin
 
 # Jackett configuration
@@ -87,7 +92,6 @@ DATA_DIR=/data
 MOVIES_DIR=/data/completed/Movies
 # Default TV directory is /data/completed/TV
 TV_DIR=/data/completed/TV
-
 
 # Retry settings for Transmission connection
 MAX_RETRIES=30
@@ -114,20 +118,22 @@ python bot.py
 
 ### Available Commands
 
-| Command                    | Description                                      |
-| -------------------------- | ------------------------------------------------ |
-| `/search <query>`          | Search for torrents matching your query          |
-| `/imdb <link>`             | Fetch IMDb information and search for the title  |
-| `/torrent <link>`          | Add a torrent using a magnet link or URL         |
-| `/list` or `/ls`           | List all torrents with progress                  |
-| `/delete <id>`             | Delete a torrent and its data                    |
-| `/start <id>`              | Start a paused torrent                           |
-| `/stop <id>`               | Pause a torrent                                  |
-| `/m <id>` or `/movie <id>` | Move a completed torrent to the Movies directory |
-| `/t <id>` or `/tv <id>`    | Move a completed torrent to the TV directory     |
-| `/help` or `/h`            | Show help message                                |
+| Command                                  | Description                                      |
+| ---------------------------------------- | ------------------------------------------------ |
+| `/search <query>` or `/s`                | Search for torrents matching your query          |
+| `/imdb <link>`                           | Fetch IMDb information and search for the title  |
+| `/torrent <link>` or `/magnet` or `/add` | Add a torrent using a magnet link or URL         |
+| `/list` or `/ls`                         | List all torrents with progress                  |
+| `/delete <id>` or `/del`                 | Delete a torrent and its data                    |
+| `/start <id>`                            | Start a paused torrent                           |
+| `/forcestart <id>` or `/fs`              | Force start a torrent (bypass queue)             |
+| `/stop <id>`                             | Pause a torrent                                  |
+| `/m <id>` or `/movie <id>`               | Move a completed torrent to the Movies directory |
+| `/t <id>` or `/tv <id>`                  | Move a completed torrent to the TV directory     |
+| `/info <id>` or `/i`                     | Get detailed information about a torrent         |
+| `/help` or `/h`                          | Show help message                                |
 
-## 🐳 Docker Setup (Optional)
+## 🐳 Docker Setup
 
 For easy deployment, you can use Docker:
 
@@ -146,17 +152,50 @@ docker run -d --name torrentbot \
 
 ```
 torrentbot/
-├── bot.py               # Main entry point
+├── bot.py               # Main entry point and bot initialization
 ├── commands.py          # Command handlers
-├── config.py            # Configuration settings
+├── config.py            # Configuration settings and environment vars
 ├── imdb.py              # IMDb API interaction
 ├── jackett.py           # Jackett API interaction
 ├── message_formatting.py # Telegram message formatting
 ├── torrent_manager.py   # Transmission client wrapper
 ├── requirements.txt     # Python dependencies
 ├── .env                 # Environment variables (create this)
-└── README.md            # This file
+├── Dockerfile           # Docker configuration
+├── .gitignore           # Git ignore patterns
+└── README.md            # Project documentation
 ```
+
+## ⚙️ Enhanced Features
+
+### Real-time Progress Tracking
+
+The bot automatically updates torrent progress messages in real-time, showing:
+
+- Visual progress bars
+- Download speed
+- ETA (estimated time of arrival)
+- File size
+- Free disk space
+
+### Content Organization
+
+Once downloads are complete, easily organize your content:
+
+- `/movie` command moves content to your Movies directory
+- `/tv` command moves content to your TV Shows directory
+
+### Concurrent Updates
+
+The bot handles multiple commands simultaneously, making it responsive even when managing many torrents.
+
+### Error Handling & Retry Logic
+
+Robust error handling ensures the bot remains operational:
+
+- Automatic reconnection to Transmission if connection is lost
+- Graceful error messages for failed operations
+- Background task execution to prevent UI blocking
 
 ## 🔒 Security Considerations
 
@@ -164,6 +203,7 @@ torrentbot/
 - Keep your API tokens secure and never commit them to version control
 - Consider running Transmission with authentication
 - For public deployments, use HTTPS for all API communications
+- Docker provides an extra layer of isolation
 
 ## 🚫 Disclaimer
 
