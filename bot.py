@@ -116,6 +116,7 @@ def main():
     application.add_handler(CommandHandler("h", help_command))
     # Torrent info command
     application.add_handler(CommandHandler("info", info_torrent))
+    application.add_handler(CommandHandler("i", info_torrent))
 
     # Add error handler
     application.add_error_handler(error_handler)
