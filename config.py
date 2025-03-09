@@ -41,7 +41,7 @@ DOWNLOAD_LINK_PREFIX = os.getenv("DOWNLOAD_LINK_PREFIX")
 
 
 # Retry settings for Transmission connection
-MAX_RETRIES = int(os.getenv("MAX_RETRIES", 30))
+MAX_RETRIES = int(os.getenv("MAX_RETRIES", 300))
 RETRY_DELAY = int(os.getenv("RETRY_DELAY", 60))
 
 # Authorized users (Telegram user IDs)

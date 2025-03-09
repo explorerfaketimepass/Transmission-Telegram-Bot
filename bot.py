@@ -61,7 +61,6 @@ async def post_init(app: Application):
     try:
         # Establish connection to Transmission before accepting commands
         await torrent_manager.ensure_connected()
-        print("Torrent manager initialized successfully")
     except Exception as e:
         print(f"Error initializing torrent manager: {e}")
         # We'll let the application continue, and retry connections later
@@ -122,7 +121,6 @@ def main():
     application.add_error_handler(error_handler)
 
     # Run the bot with polling
-    print("Starting bot with concurrent updates enabled")
     application.run_polling(allowed_updates=["message", "callback_query"])
 
 
